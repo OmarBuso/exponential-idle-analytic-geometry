@@ -13,7 +13,9 @@ Visual LaTeX equations and progressive complexity
 \dot{\rho} = q_1 sqrt[2.4n]{\prod_{i=1}^n( d(i) \cdot z(i) \cdot q_2)}
 
 Where:
-d(x) = \sqrt{X(x)^2 + Y(x)^2}
+
+d(x) = \sqrt{X(x)^2 + Y(x)^2} 
+
 z(x) = |X(x)| + |Y(x)|
 
 ## How to Use
