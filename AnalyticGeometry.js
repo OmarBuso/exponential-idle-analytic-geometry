@@ -5,9 +5,14 @@ import { Utils } from "./api/Utils";
 
 var id = "analytic_geometry";
 var name = "Analytic Geometry";
-var description = "Just a 'simple' custom theory about Functions, Coordinates and some big numbers \n\n You might notice that the number of the root changes, its purpose is to balance ρ gain with a simple formula: \n\n If ρ<1e25, it's 2.4 \n\n If ρ<1e50, it's 2.6 \n\n If ρ>1e50, it's 2.7"
+var description = "Just a 'simple' custom theory about Functions, Coordinates and some big numbers \n\n You might notice that the number of the root changes, its purpose is to balance ρ gain with a simple formula: \n\n If ρ<1e25, it's 2.4 \n\n If ρ<1e50, it's 2.5 \n\n If ρ>1e50, it's 2.65"
 var authors = "OmarBuso";
-var version = 1;
+var version = 1.1;
+
+// Update 1.1:
+// Fixed and balanced q1 Exponent Milestone
+// Made the function updateProd() to compute "product" only when a1/a2/n updates
+// Changed the way "product" computes
 
 requiresGameVersion("1.4.33");
 
@@ -15,6 +20,7 @@ var currency;                                           // ρ
 var q1, q2, a1, a2, n;                                  // Variables
 var q1Exp, a1Boost, a2Term, funcXY, addFuncZ, funcZ;    // Milestones
 var tauMultiplier = 0.4;                                // Conversion rate from ρ to τ
+var updateprod_flag = true;
 
 // sorry for bad english
 // functions > vars
@@ -48,6 +54,7 @@ function init() {
         a1 = theory.createUpgrade(2, currency, new ExponentialCost(25, 0.2));
         a1.getDescription = (_) => Utils.getMath(getDesc(a1.level));
         a1.getInfo = (amount) => Utils.getMathTo(getDesc(a1.level), getDesc(a1.level + amount));
+        a1.bought = (_) => (updateprod_flag = true);
     }
 
     // a2
@@ -56,6 +63,7 @@ function init() {
         a2 = theory.createUpgrade(3, currency, new ExponentialCost(BigNumber.from(1e125), Math.log2(1e10)));
         a2.getDescription = (_) => Utils.getMath(getDesc(a2.level));
         a2.getInfo = (amount) => Utils.getMathTo(getDesc(a2.level), getDesc(a2.level + amount));
+        a2.bought = (_) => (updateprod_flag = true);
     }
 
     // n
@@ -66,6 +74,7 @@ function init() {
         n.maxLevel = 50;
         n.getDescription = (_) => Utils.getMath(getDesc(n.level));
         n.getInfo = (amount) => Utils.getMathTo(getInfo(n.level), getInfo(n.level + amount));
+        n.bought = (_) => (updateprod_flag = true);
     }
 
     /////////////////////
@@ -81,8 +90,12 @@ function init() {
     // Upgrade q1 Exponent
     {
         q1Exp = theory.createMilestoneUpgrade(0, 3);
-        q1Exp.description = Localization.getUpgradeIncCustomExpDesc("q_1", "0.1");
-        q1Exp.info = Localization.getUpgradeIncCustomExpInfo("q_1", "0.1");
+        q1Exp.getDescription = (amount) =>
+        Localization.getUpgradeIncCustomExpDesc('q_1',
+        q1ExpTable[q1Exp.level + amount] - q1ExpTable[q1Exp.level] || 0);
+        q1Exp.getInfo = (amount) =>
+        Localization.getUpgradeIncCustomExpInfo('q_1',
+        q1ExpTable[q1Exp.level + amount] - q1ExpTable[q1Exp.level] || 0);
         q1Exp.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             updateAvailability();
@@ -94,7 +107,10 @@ function init() {
         a1Boost = theory.createMilestoneUpgrade(1, 1);
         a1Boost.getDescription = (_) => "Improve ${a_1}$ variable scaling";
         a1Boost.getInfo = (_) => "Improves ${a_1}$ variable scaling";
-        a1Boost.boughtOrRefunded = (_) => updateAvailability();
+        a1Boost.boughtOrRefunded = (_) => {
+            updateprod_flag = true;
+            updateAvailability();
+        };
         a1Boost.canBeRefunded = (_) => a2Term.level === 0;
     }
 
@@ -105,6 +121,7 @@ function init() {
         a2Term.info = Localization.getUpgradeAddTermInfo("a_2");
         a2Term.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
+            updateprod_flag = true;
             updateAvailability();
         };
         a2Term.canBeRefunded = (_) => funcXY.level === 0;
@@ -118,6 +135,7 @@ function init() {
         funcXY.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             theory.invalidateSecondaryEquation();
+            updateprod_flag = true;
             updateAvailability();
         };
         funcXY.canBeRefunded = (_) => addFuncZ.level === 0;
@@ -131,6 +149,7 @@ function init() {
         addFuncZ.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             theory.invalidateSecondaryEquation();
+            updateprod_flag = true;
             updateAvailability();
         };
         addFuncZ.canBeRefunded = (_) => funcZ.level === 0;
@@ -144,6 +163,7 @@ function init() {
         funcZ.boughtOrRefunded = (_) => {
             theory.invalidatePrimaryEquation();
             theory.invalidateSecondaryEquation();
+            updateprod_flag = true;
             updateAvailability();
         };
     }
@@ -171,11 +191,11 @@ function tick(elapsedTime, multiplier) {
     let dt = BigNumber.from(elapsedTime * multiplier);
     let bonus = theory.publicationMultiplier;
     let intA1 = getA1(a1.level);
-    let nVar = getN(n.level);
-    let intN = parseInt(nVar.toString());
-    let q1Total = getQ1(q1.level).pow(1 + q1Exp.level * 0.1);
+    let intN = parseInt(getN(n.level).toString());
+    let q1Val = getQ1(q1.level).pow(getQ1Exp(q1Exp.level));
+    let q2Val = getQ2(q2.level)
 
-    // Functions (please dont look at them for too long, thanks)
+    // Functions X(x), Y(x) and Z(x)
     const X = (x) => {
         if (funcXY.level === 0) return intA1 * (x ** (x - 0.3 * intN));
         if (funcXY.level === 1) return 2 * intA1 * (x ** intN) * Math.cos(x);
@@ -201,43 +221,48 @@ function tick(elapsedTime, multiplier) {
         return 0;
     };
     // If someone wants to see where are the points, use a graphing calculator and put something like (X(a), Y(a), Z(a)) for a=[1,2,...,15]
+
     let product = BigNumber.ONE;
+    function updateProd() {
+        for (let i = 1; i <= intN; i++) {
+            let t = i + Math.log2(getA2(a2.level));
+            let xVal = BigNumber.from(X(t)); // Totally necesary conversions to BigNumber
+            let yVal = BigNumber.from(Y(t));
+            let zVal = BigNumber.from(Z(t));
 
-    function nthRoot(inRoot, intN) {
-        return BigNumber.from(inRoot).pow(1 / intN);
+            const pointDistance = BigNumber.from((xVal.pow(2) + yVal.pow(2) + zVal.pow(2)).sqrt());     // Distance function
+            const pointSum = BigNumber.from(xVal.abs() + yVal.abs() + zVal.abs());                      // Sum of point coordinate
+            const term = BigNumber.from(pointDistance * pointSum * q2Val);
+            product *= BigNumber.from(term); // Definetly not a way to overcomplicate a product function
+        }
+    }
+        if (updateprod_flag = true && n.level < 51) {
+        updateProd();
+        updateprod_flag = false;
     }
 
-    for (let i = 1; i <= intN; i++) {
-        let t = i + Math.log2(getA2(a2.level));
-        let xVal = BigNumber.from(X(t)); // Totally necesary conversions to BigNumber
-        let yVal = BigNumber.from(Y(t));
-        let zVal = BigNumber.from(Z(t));
-
-        function pointDistance(t) {
-            return BigNumber.from((xVal.pow(2) + yVal.pow(2) + zVal.pow(2)).sqrt());
-        }  // Distance function
-        function pointSum(t) {
-            return BigNumber.from(xVal.abs() + yVal.abs() + zVal.abs());
-        }  // Sum of point coordinate
-
-        let term = BigNumber.from(pointDistance(t) * pointSum(t) * getQ2(q2.level));
-        product *= BigNumber.from(term); // Definetly not a way to overcomplicate a product function
-    }
-
-    currency.value += BigNumber.from(dt * bonus * q1Total * nthRoot(product, rootBalance() * intN));
+    currency.value += BigNumber.from(dt * bonus * q1Val * nthRoot(product, rootBalance() * intN));
 }
+
+function nthRoot(inRoot, intN){ return BigNumber.from(inRoot).pow(1 / intN)};
+
+function postPublish() {
+    prevN = 1;
+    updateprod_flag = true;
+    theory.invalidatePrimaryEquation();
+};
 
 function getPrimaryEquation() {
     theory.primaryEquationHeight = 70;
     let result = `\\dot{\\rho} = q_1 `;
-    if (q1Exp.level !== 0) result += `^{${1 + q1Exp.level * 0.05}}`;
+    if (q1Exp.level !== 0) result += `^{${getQ1Exp(q1Exp.level)}}`;
     if (a2Term.level === 0) {
-        result += `\\sqrt[{${rootBalance()}}n]{\\prod_{i=1}^{n}(d(i) \\cdot z(i) \\cdot q_2)}`;
+        result += `\\cdot \\sqrt[{${rootBalance()}}n]{\\prod_{i=1}^{n}(d(i) \\cdot z(i) \\cdot q_2)}`;
 
         theory.primaryEquationScale = 1;
     };
     if (a2Term.level === 1) {
-        result += `\\sqrt[{${rootBalance()}}n]{\\prod_{i=1}^{n}(d(t) \\cdot z(t) \\cdot q_2)}, \\quad t = i+log_2(a_2)`;
+        result += `\\cdot \\sqrt[{${rootBalance()}}n]{\\prod_{i=1}^{n}(d(t) \\cdot z(t) \\cdot q_2)}, \\quad t = i+log_2(a_2)`;
         theory.primaryEquationScale = 0.90;
     };
     return result;
@@ -278,6 +303,13 @@ var getCurrencyFromTau = (tau) => [tau.max(BigNumber.ONE).pow(1/tauMultiplier), 
 var get2DGraphValue = () => currency.value.sign * (BigNumber.ONE + currency.value.abs()).log10().toNumber();
 
 var getQ1 = (level) => Utils.getStepwisePowerSum(level, 2, 10, 0);
+var q1ExpTable = [
+    BigNumber.ONE,
+    BigNumber.from(1.25),
+    BigNumber.from(1.40),
+    BigNumber.from(1.50)
+];
+var getQ1Exp = (level) => q1ExpTable[level];
 var getQ2 = (level) => BigNumber.TEN.pow(BigNumber.from(level));
 var getA1 = (level) => {
     if(a1Boost.level === 0){ return BigNumber.from(1 + 0.5 * level); }
@@ -285,20 +317,18 @@ var getA1 = (level) => {
 };
 var getA2 = (level) => BigNumber.from(1 + 5 * level);
 var getN = (level) => BigNumber.from(1 + level);
-var getNCost = (level) => {
+var getNCost = (level) => { // O(1) !
     if (level === 0) return BigNumber.from(1000);
     if (level < 5) return BigNumber.from(100).pow(level + 1);
-    let cost = BigNumber.from(100).pow(5);
-    for (let i = 5; i <= level; i++) {
-        let multiplier = BigNumber.TEN.pow(i - 2);
-        cost *= BigNumber.from(multiplier);
-    }
-    return cost;
+
+    let base = BigNumber.from(100).pow(6);
+    let exponent = ((level - 3) * (level - 4)) / 2; // Sum of (i - 3) from i = 5 to level
+    return base * BigNumber.TEN.pow(exponent);
 };
 var rootBalance = () => { // why, just why? -future me
     if (currency.value < BigNumber.from(1e25)) return 2.4; theory.invalidatePrimaryEquation();
-    if (currency.value < BigNumber.from(1e50)) return 2.6; theory.invalidatePrimaryEquation();
-    if (currency.value > BigNumber.from(1e50)) return 2.7; theory.invalidatePrimaryEquation();
+    if (currency.value < BigNumber.from(1e50)) return 2.5; theory.invalidatePrimaryEquation();
+    if (currency.value > BigNumber.from(1e50)) return 2.65; theory.invalidatePrimaryEquation();
     return 1;
 };
 
